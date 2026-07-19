@@ -1,0 +1,41 @@
+{
+  "name": "sandcastle-agent-kimi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kimi Code agent provider for Sandcastle",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "verify-host": "tsx scripts/verify-host.mts"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@ai-hero/sandcastle": ">=0.12.0"
+  },
+  "devDependencies": {
+    "@ai-hero/sandcastle": "^0.12.0",
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "allowScripts": {
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.1": true
+  }
+}
