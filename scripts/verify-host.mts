@@ -22,7 +22,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { kimiCode, kimiWorkDirKey } from "../src/index.js";
+import { kimiCode } from "../src/index.js";
+import { kimiWorkDirKey } from "../src/KimiSessionStore.js";
 
 const execp = promisify(exec);
 const MODEL = "kimi-code/k3";
