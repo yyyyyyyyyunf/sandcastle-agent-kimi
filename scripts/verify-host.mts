@@ -4,12 +4,16 @@
  * parser end to end:
  *
  *   1. fresh print run → session_id emitted by the stream
- *   2. resume round-trip → same session id, context recalled
- *   3. fork round-trip → parent state.json byte-for-byte unchanged, fork
+ *   2. resume round-trip (same cwd) → same session id, context recalled
+ *   3. cross-cwd resume → the ensure-local relocate step moves the session
+ *      into the new cwd's bucket (state cwd + wire binding + index) and the
+ *      run succeeds there — the merge-to-head worktree-churn scenario
+ *   4. fork round-trip → parent state.json byte-for-byte unchanged, fork
  *      resumes under a new id with forkedFrom stamped
+ *   5. cross-cwd fork → ensure-local + fork chained across buckets
  *
- * Uses the real ~/.kimi-code (host OAuth credentials) but a throwaway cwd.
- * Run with: npm run verify-host
+ * Uses the real ~/.kimi-code (host OAuth credentials) but throwaway cwds.
+ * Run with: pnpm run verify-host
  */
 
 import { exec } from "node:child_process";
@@ -76,7 +80,9 @@ const kimiHome = join(process.env.HOME ?? "~", ".kimi-code");
 
 const main = async (): Promise<void> => {
   const cwd = await mkdtemp(join(tmpdir(), "kimi-verify-"));
+  const cwd2 = await mkdtemp(join(tmpdir(), "kimi-verify-xcwd-"));
   console.log(`verify cwd: ${cwd}`);
+  console.log(`verify cross-cwd: ${cwd2}`);
   try {
     // 1. Fresh run -----------------------------------------------------------
     const fresh = provider.buildPrintCommand({
@@ -93,7 +99,7 @@ const main = async (): Promise<void> => {
     );
     if (!r1.sessionId) throw new Error("no session id — cannot continue");
 
-    // 2. Resume round-trip ---------------------------------------------------
+    // 2. Resume round-trip (same cwd — ensure-local must no-op) --------------
     const resume = provider.buildPrintCommand({
       prompt: "What was the codeword? Reply with just the codeword.",
       dangerouslySkipPermissions: true,
@@ -112,8 +118,31 @@ const main = async (): Promise<void> => {
       `result=${r2.resultText.slice(0, 120)}`,
     );
 
-    // 3. Fork round-trip -----------------------------------------------------
-    const bucket = kimiWorkDirKey(cwd);
+    // 3. Cross-cwd resume (worktree churn — the merge-to-head scenario) ------
+    const xresume = provider.buildPrintCommand({
+      prompt: "What was the codeword? Reply with just the codeword.",
+      dangerouslySkipPermissions: true,
+      resumeSession: r1.sessionId,
+    });
+    const r2x = await runProviderCommand(xresume.command, cwd2);
+    check(
+      "cross-cwd resume exits 0 (ensure-local relocated the session)",
+      r2x.code === 0,
+      `code=${r2x.code} ${r2x.stderr}`,
+    );
+    check(
+      "cross-cwd resume keeps the same session id",
+      r2x.sessionId === r1.sessionId,
+      `${r2x.sessionId} !== ${r1.sessionId}`,
+    );
+    check(
+      "cross-cwd resume recalls context (PINEAPPLE)",
+      r2x.resultText.toUpperCase().includes("PINEAPPLE"),
+      `result=${r2x.resultText.slice(0, 120)}`,
+    );
+
+    // 4. Fork round-trip (from cwd2, where the session now lives) ------------
+    const bucket = kimiWorkDirKey(cwd2);
     const parentStatePath = join(
       kimiHome,
       "sessions",
@@ -129,7 +158,7 @@ const main = async (): Promise<void> => {
       resumeSession: r1.sessionId,
       forkSession: true,
     });
-    const r3 = await runProviderCommand(fork.command, cwd);
+    const r3 = await runProviderCommand(fork.command, cwd2);
     check("fork exits 0", r3.code === 0, `code=${r3.code} ${r3.stderr}`);
     check(
       "fork resumes under a new session id",
@@ -173,12 +202,39 @@ const main = async (): Promise<void> => {
         "fork is registered in session_index.jsonl",
         indexEntry?.sessionDir ===
           join(kimiHome, "sessions", bucket, r3.sessionId) &&
-          indexEntry?.workDir === realpathSync(cwd),
+          indexEntry?.workDir === realpathSync(cwd2),
         JSON.stringify(indexEntry),
       );
     }
+
+    // 5. Cross-cwd fork (back in cwd — ensure-local + fork chained) ----------
+    const xfork = provider.buildPrintCommand({
+      prompt: "What was the codeword? Reply with just the codeword.",
+      dangerouslySkipPermissions: true,
+      resumeSession: r1.sessionId,
+      forkSession: true,
+    });
+    const r4 = await runProviderCommand(xfork.command, cwd);
+    check(
+      "cross-cwd fork exits 0",
+      r4.code === 0,
+      `code=${r4.code} ${r4.stderr}`,
+    );
+    check(
+      "cross-cwd fork resumes under a fresh id",
+      typeof r4.sessionId === "string" &&
+        r4.sessionId !== r1.sessionId &&
+        r4.sessionId !== r3.sessionId,
+      `sessionId=${r4.sessionId}`,
+    );
+    check(
+      "cross-cwd fork recalls context (PINEAPPLE)",
+      r4.resultText.toUpperCase().includes("PINEAPPLE"),
+      `result=${r4.resultText.slice(0, 120)}`,
+    );
   } finally {
     await rm(cwd, { recursive: true, force: true });
+    await rm(cwd2, { recursive: true, force: true });
   }
 
   if (failures > 0) {

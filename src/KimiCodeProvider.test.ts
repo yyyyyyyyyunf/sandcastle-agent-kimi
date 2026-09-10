@@ -12,7 +12,10 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { BindMountSandboxHandle } from "@ai-hero/sandcastle";
-import { kimiCode } from "./KimiCodeProvider.js";
+import {
+  isKimiVersionLayoutSupported,
+  kimiCode,
+} from "./KimiCodeProvider.js";
 import {
   KIMI_MAIN_WIRE_REL,
   kimiWorkDirKeyForRealPath,
@@ -54,19 +57,19 @@ describe("kimiCode factory", () => {
       );
     });
 
-    it("appends --session for resume", () => {
+    it("prepends an ensure-local relocate step for resume, then appends --session", () => {
       const provider = kimiCode("kimi-code/k3");
       const { command } = provider.buildPrintCommand({
         prompt: "go on",
         dangerouslySkipPermissions: true,
         resumeSession: "session_abc",
       });
-      expect(command).toBe(
-        `kimi -p 'go on' --output-format stream-json -m 'kimi-code/k3' --session 'session_abc'`,
-      );
+      expect(command).toMatch(/^node -e '.+' && kimi -p 'go on' /);
+      expect(command).toContain("session_abc");
+      expect(command).toMatch(/--session 'session_abc'$/);
     });
 
-    it("forks via a storage-layer copy and resumes the new id", () => {
+    it("forks via ensure-local + storage-layer copy and resumes the new id", () => {
       const provider = kimiCode("kimi-code/k3");
       const { command } = provider.buildPrintCommand({
         prompt: "go on",
@@ -74,7 +77,7 @@ describe("kimiCode factory", () => {
         resumeSession: "session_parent",
         forkSession: true,
       });
-      expect(command).toMatch(/^node -e '.+' && kimi -p /);
+      expect(command).toMatch(/^node -e '.+' && node -e '.+' && kimi -p /);
       expect(command).toContain("session_parent");
       const sessionFlag = command.match(/--session '([^']+)'/);
       expect(sessionFlag).not.toBeNull();
@@ -101,6 +104,17 @@ describe("kimiCode factory", () => {
 
     it("maps assistant content to text + result", () => {
       expect(parse('{"role":"assistant","content":"PROBE_OK"}')).toEqual([
+        { type: "text", text: "PROBE_OK" },
+        { type: "result", result: "PROBE_OK" },
+      ]);
+    });
+
+    it("collapses array-shaped content blocks defensively", () => {
+      expect(
+        parse(
+          '{"role":"assistant","content":[{"type":"text","text":"PRO"},{"type":"text","text":"BE_OK"}]}',
+        ),
+      ).toEqual([
         { type: "text", text: "PROBE_OK" },
         { type: "result", result: "PROBE_OK" },
       ]);
@@ -134,6 +148,16 @@ describe("kimiCode factory", () => {
       ]);
     });
 
+    it("maps assistant messages carrying content AND tool_calls in one line", () => {
+      const line =
+        '{"role":"assistant","content":"checking","tool_calls":[{"type":"function","id":"t1","function":{"name":"Bash","arguments":"{\\"command\\":\\"ls\\"}"}}]}';
+      expect(parse(line)).toEqual([
+        { type: "tool_call", name: "Bash", args: "ls" },
+        { type: "text", text: "checking" },
+        { type: "result", result: "checking" },
+      ]);
+    });
+
     it("skips tool result messages", () => {
       expect(
         parse(
@@ -157,6 +181,9 @@ describe("kimiCode factory", () => {
       expect(parse('{"type":"error","error":{"message":"boom"}}')).toEqual([
         { type: "result", result: "boom" },
       ]);
+      expect(parse('{"type":"agent_error","error":"kaput"}')).toEqual([
+        { type: "result", result: "kaput" },
+      ]);
     });
 
     it("returns [] for non-JSON and empty content", () => {
@@ -177,6 +204,17 @@ describe("kimiCode factory", () => {
         outputTokens: 37,
       });
     });
+  });
+});
+
+describe("isKimiVersionLayoutSupported", () => {
+  it("accepts the verified floor and above, warns below, ignores noise", () => {
+    expect(isKimiVersionLayoutSupported("0.42.0")).toBe(true);
+    expect(isKimiVersionLayoutSupported("0.42.1")).toBe(true);
+    expect(isKimiVersionLayoutSupported("1.0.0")).toBe(true);
+    expect(isKimiVersionLayoutSupported("0.41.0")).toBe(false);
+    expect(isKimiVersionLayoutSupported("0.27.0")).toBe(false);
+    expect(isKimiVersionLayoutSupported("not-a-version")).toBe(true);
   });
 });
 
@@ -240,13 +278,15 @@ const writeSandboxSession = async (
   sandboxFsRoot: string,
   sandboxCwd: string,
   sessionId: string,
+  sessionsRoot: string = SANDBOX_SESSIONS,
 ): Promise<string> => {
   const dir = join(
     sandboxFsRoot,
-    SANDBOX_SESSIONS,
+    sessionsRoot,
     kimiWorkDirKeyForRealPath(sandboxCwd),
     sessionId,
   );
+  const sandboxBucket = kimiWorkDirKeyForRealPath(sandboxCwd);
   await mkdir(join(dir, "agents", "main"), { recursive: true });
   await mkdir(join(dir, "agents", "agent-0"), { recursive: true });
   await mkdir(join(dir, "logs"), { recursive: true });
@@ -254,13 +294,17 @@ const writeSandboxSession = async (
     join(dir, "state.json"),
     JSON.stringify(
       {
-        workDir: sandboxCwd,
+        cwd: sandboxCwd,
         title: "probe",
         agents: {
           main: {
             homedir: `${dir.slice(sandboxFsRoot.length)}/agents/main`,
             type: "main",
-            parentAgentId: null,
+          },
+          "agent-0": {
+            homedir: `${dir.slice(sandboxFsRoot.length)}/agents/agent-0`,
+            type: "subagent",
+            parentAgentId: "main",
           },
         },
       },
@@ -268,11 +312,15 @@ const writeSandboxSession = async (
       2,
     ),
   );
-  await writeFile(join(dir, "agents", "main", "wire.jsonl"), '{"main":1}\n');
+  await writeFile(
+    join(dir, "agents", "main", "wire.jsonl"),
+    `{"type":"runtime.set_binding","agentId":"main","runtimeId":"r1","workspaceId":"${sandboxBucket}"}\n{"main":1}\n`,
+  );
   await writeFile(
     join(dir, "agents", "agent-0", "wire.jsonl"),
-    '{"sub":1}\n',
+    `{"type":"runtime.set_binding","agentId":"agent-0","runtimeId":"r2","workspaceId":"${sandboxBucket}"}\n{"sub":1}\n`,
   );
+  await writeFile(join(dir, "upcoming-goals.json"), '{"goals":["g1"]}\n');
   await writeFile(join(dir, "logs", "kimi-code.log"), "diagnostic\n");
   return dir;
 };
@@ -306,7 +354,7 @@ describe("sessionStorage", () => {
     await rm(sandboxFsRoot, { recursive: true, force: true });
   });
 
-  it("captureToHost transfers the session record, rewriting state.json to the host cwd", async () => {
+  it("captureToHost transfers the session record, rewriting cwd + homedirs + wire binding to the host side", async () => {
     const sandboxCwd = "/workspace/repo";
     await writeSandboxSession(sandboxFsRoot, sandboxCwd, sessionId);
 
@@ -318,25 +366,33 @@ describe("sessionStorage", () => {
       handle,
     });
 
-    const hostDir = join(
-      hostSessionsDir,
-      kimiWorkDirKeyForRealPath(realpathSync(hostCwd)),
-      sessionId,
-    );
+    const hostBucket = kimiWorkDirKeyForRealPath(realpathSync(hostCwd));
+    const hostDir = join(hostSessionsDir, hostBucket, sessionId);
     const state = JSON.parse(
       await readFile(join(hostDir, "state.json"), "utf-8"),
     );
-    expect(state.workDir).toBe(realpathSync(hostCwd));
+    expect(state.cwd).toBe(realpathSync(hostCwd));
     expect(state.agents.main.homedir).toBe(join(hostDir, "agents", "main"));
+    expect(state.agents["agent-0"].homedir).toBe(
+      join(hostDir, "agents", "agent-0"),
+    );
     expect(state.title).toBe("probe");
 
-    expect(await readFile(join(hostDir, KIMI_MAIN_WIRE_REL), "utf-8")).toBe(
-      '{"main":1}\n',
+    // wire bindings rebound to the host bucket, content lines preserved
+    const mainWire = await readFile(join(hostDir, KIMI_MAIN_WIRE_REL), "utf-8");
+    const mainLines = mainWire.split("\n");
+    expect(JSON.parse(mainLines[0]!).workspaceId).toBe(hostBucket);
+    expect(mainLines[1]).toBe('{"main":1}');
+    const subWire = await readFile(
+      join(hostDir, "agents", "agent-0", "wire.jsonl"),
+      "utf-8",
     );
-    // subagent wire captured too
-    expect(
-      await readFile(join(hostDir, "agents", "agent-0", "wire.jsonl"), "utf-8"),
-    ).toBe('{"sub":1}\n');
+    expect(JSON.parse(subWire.split("\n")[0]!).workspaceId).toBe(hostBucket);
+
+    // pending goals survive capture (only forks drop them)
+    expect(await readFile(join(hostDir, "upcoming-goals.json"), "utf-8")).toBe(
+      '{"goals":["g1"]}\n',
+    );
     // logs are not part of the session record
     await expect(
       readFile(join(hostDir, "logs", "kimi-code.log"), "utf-8"),
@@ -348,9 +404,9 @@ describe("sessionStorage", () => {
     expect(provider.sessionStorage.hostSessionFilePath(hostCwd, sessionId)).toBe(
       join(hostDir, KIMI_MAIN_WIRE_REL),
     );
-    expect(await provider.sessionStorage.readHostSession(hostCwd, sessionId)).toBe(
-      '{"main":1}\n',
-    );
+    expect(
+      await provider.sessionStorage.readHostSession(hostCwd, sessionId),
+    ).toBe(mainWire);
 
     // session registered in the host index (kimi gates resume-by-id on it)
     const indexEntry = {
@@ -374,6 +430,34 @@ describe("sessionStorage", () => {
     ).toBe(JSON.stringify(indexEntry) + "\n");
   });
 
+  it("captureToHost keeps every session's index entry under concurrent captures", async () => {
+    const sandboxCwd = "/workspace/repo";
+    const otherId = "session_7d41cbe2-5f1c-4b3a-9f7e-2a2f9e2b1c10";
+    await writeSandboxSession(sandboxFsRoot, sandboxCwd, sessionId);
+    await writeSandboxSession(sandboxFsRoot, sandboxCwd, otherId);
+
+    const provider = makeProvider();
+    await Promise.all(
+      [sessionId, otherId].map((id) =>
+        provider.sessionStorage.captureToHost({
+          hostCwd,
+          sandboxCwd,
+          sessionId: id,
+          handle,
+        }),
+      ),
+    );
+
+    const lines = (
+      await readFile(join(hostHome, "session_index.jsonl"), "utf-8")
+    )
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l).sessionId)
+      .sort();
+    expect(lines).toEqual([otherId, sessionId].sort());
+  });
+
   it("captureToHost throws when the session is missing from the sandbox", async () => {
     const provider = makeProvider();
     await expect(
@@ -386,7 +470,37 @@ describe("sessionStorage", () => {
     ).rejects.toThrow(/missing state\.json/);
   });
 
-  it("resumeIntoSandbox transfers back with state.json rewritten to the new sandbox cwd", async () => {
+  it("derives sandboxSessionsDir from env.KIMI_CODE_HOME when not overridden", async () => {
+    const customRoot = "/custom/kimi-home/sessions";
+    await writeSandboxSession(
+      sandboxFsRoot,
+      "/workspace/repo",
+      sessionId,
+      customRoot,
+    );
+    const provider = kimiCode("__kimi_env_model__", {
+      env: { KIMI_CODE_HOME: "/custom/kimi-home" },
+      sessionStorage: { hostSessionsDir },
+    });
+    await provider.sessionStorage.captureToHost({
+      hostCwd,
+      sandboxCwd: "/workspace/repo",
+      sessionId,
+      handle,
+    });
+    // found the session under the env-derived sandbox root
+    const hostDir = join(
+      hostSessionsDir,
+      kimiWorkDirKeyForRealPath(realpathSync(hostCwd)),
+      sessionId,
+    );
+    const state = JSON.parse(
+      await readFile(join(hostDir, "state.json"), "utf-8"),
+    );
+    expect(state.cwd).toBe(realpathSync(hostCwd));
+  });
+
+  it("resumeIntoSandbox transfers back with cwd + homedirs + wire binding rewritten to the new sandbox cwd", async () => {
     const firstCwd = "/workspace/repo";
     const secondCwd = "/workspace/other";
     await writeSandboxSession(sandboxFsRoot, firstCwd, sessionId);
@@ -405,22 +519,30 @@ describe("sessionStorage", () => {
       handle,
     });
 
+    const secondBucket = kimiWorkDirKeyForRealPath(secondCwd);
     const resumedDir = join(
       sandboxFsRoot,
       SANDBOX_SESSIONS,
-      kimiWorkDirKeyForRealPath(secondCwd),
+      secondBucket,
       sessionId,
     );
     const state = JSON.parse(
       await readFile(join(resumedDir, "state.json"), "utf-8"),
     );
-    expect(state.workDir).toBe(secondCwd);
+    expect(state.cwd).toBe(secondCwd);
     expect(state.agents.main.homedir).toBe(
-      `/home/agent/.kimi-code/sessions/${kimiWorkDirKeyForRealPath(secondCwd)}/${sessionId}/agents/main`,
+      `${SANDBOX_SESSIONS}/${secondBucket}/${sessionId}/agents/main`,
     );
+    expect(state.agents["agent-0"].homedir).toBe(
+      `${SANDBOX_SESSIONS}/${secondBucket}/${sessionId}/agents/agent-0`,
+    );
+    const wire = await readFile(join(resumedDir, KIMI_MAIN_WIRE_REL), "utf-8");
+    expect(JSON.parse(wire.split("\n")[0]!).workspaceId).toBe(secondBucket);
+    expect(wire.split("\n")[1]).toBe('{"main":1}');
+    // pending goals survive resume
     expect(
-      await readFile(join(resumedDir, KIMI_MAIN_WIRE_REL), "utf-8"),
-    ).toBe('{"main":1}\n');
+      await readFile(join(resumedDir, "upcoming-goals.json"), "utf-8"),
+    ).toBe('{"goals":["g1"]}\n');
 
     // session registered in the sandbox index (same gating as on the host)
     const sandboxIndex = JSON.parse(
@@ -431,7 +553,7 @@ describe("sessionStorage", () => {
     );
     expect(sandboxIndex).toEqual({
       sessionId,
-      sessionDir: `${SANDBOX_SESSIONS}/${kimiWorkDirKeyForRealPath(secondCwd)}/${sessionId}`,
+      sessionDir: `${SANDBOX_SESSIONS}/${secondBucket}/${sessionId}`,
       workDir: secondCwd,
     });
   });
