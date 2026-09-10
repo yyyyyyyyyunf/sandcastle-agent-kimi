@@ -129,12 +129,22 @@ pnpm run typecheck   # tsc --noEmit
 pnpm test            # vitest
 pnpm run build       # tsdown → dist/ (JS + bundled d.ts)
 pnpm run verify-host # live check against the real kimi CLI on this host
+pnpm e2e             # full run() matrix over a throwaway git repo (see below)
 ```
 
 `verify-host` exercises fresh/resume/fork round-trips end to end using your
 host kimi install and credentials (throwaway cwds; writes a few small
 sessions into your real `~/.kimi-code`, like normal CLI usage), including
 cross-cwd resume/fork relocation.
+
+`pnpm e2e` drives Sandcastle's full `run()` orchestration — five legs:
+`nosandbox` × {head, branch, merge-to-head} and `docker` × {head,
+merge-to-head} — each in a throwaway git repo under tmp (this repo's own
+git state is never touched). `pnpm e2e <mode> <strategy>` runs one leg.
+Docker legs need a running docker daemon and mount your host
+`~/.kimi-code/credentials` (must be writable: kimi token-refresh writes
+into it) and `config.toml` (read-only); the image
+(`scripts/e2e.Dockerfile`) is auto-built on first use.
 
 ## Prior art / conventions
 
