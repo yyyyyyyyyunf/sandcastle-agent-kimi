@@ -127,7 +127,7 @@ kimiCode("__kimi_env_model__", {
 pnpm install
 pnpm run typecheck   # tsc --noEmit
 pnpm test            # vitest
-pnpm run build       # tsup → dist/, tsc -p tsconfig.build.json → dist/*.d.ts
+pnpm run build       # tsdown → dist/ (JS + bundled d.ts)
 pnpm run verify-host # live check against the real kimi CLI on this host
 ```
 
