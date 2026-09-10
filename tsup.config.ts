@@ -8,7 +8,7 @@ export default defineConfig({
   platform: "node",
   sourcemap: true,
   clean: true,
-  dts: true,
+  dts: false,
   treeshake: true,
   external: ["@ai-hero/sandcastle"],
 });

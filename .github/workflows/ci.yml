@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run typecheck
+
+      - run: pnpm test
+
+      - run: pnpm run build
+
+      - name: Verify build artifacts
+        run: |
+          set -e
+          for f in dist/index.js dist/index.d.ts; do
+            if [ ! -f "$f" ]; then
+              echo "::error file=$f::Build artifact $f is missing"
+              exit 1
+            fi
+          done
+          echo "Build artifacts present: dist/index.js, dist/index.d.ts"
