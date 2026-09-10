@@ -1,4 +1,4 @@
-# Image for the docker legs of scripts/e2e.ts. kimi + node on PATH,
+# Image for the docker legs of e2e/e2e.ts. kimi + node on PATH,
 # agent user with the host UID (bind-mount ownership), sandcastle's
 # expected long-running entrypoint.
 FROM node:24-bookworm-slim

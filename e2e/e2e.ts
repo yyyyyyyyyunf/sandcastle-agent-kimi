@@ -62,7 +62,7 @@ const ensureDockerImage = async (): Promise<void> => {
   if (present) return;
   console.log(`building ${IMAGE} (first docker leg)…`);
   await execp(
-    `docker build -f scripts/e2e.Dockerfile -t ${IMAGE} .`,
+    `docker build -f e2e/Dockerfile -t ${IMAGE} .`,
     { maxBuffer: 16 * 1024 * 1024 },
   );
 };

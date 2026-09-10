@@ -20,7 +20,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify-host": "tsx scripts/verify-host.mts",
-    "e2e": "tsx scripts/e2e.ts"
+    "e2e": "tsx e2e/e2e.ts"
   },
   "license": "MIT",
   "repository": {

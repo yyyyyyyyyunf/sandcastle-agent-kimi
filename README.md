@@ -144,7 +144,7 @@ git state is never touched). `pnpm e2e <mode> <strategy>` runs one leg.
 Docker legs need a running docker daemon and mount your host
 `~/.kimi-code/credentials` (must be writable: kimi token-refresh writes
 into it) and `config.toml` (read-only); the image
-(`scripts/e2e.Dockerfile`) is auto-built on first use.
+(`e2e/Dockerfile`) is auto-built on first use.
 
 ## Prior art / conventions
 
