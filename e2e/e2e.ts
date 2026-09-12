@@ -124,7 +124,7 @@ const runLeg = async (mode: Mode, strategy: Strategy): Promise<void> => {
       () =>
         run({
           name: `e2e-${mode}-${strategy}`,
-          agent: kimiCode("kimi-code/k3"),
+          agent: kimiCode({ model: "kimi-code/k3" }),
           sandbox,
           cwd: repo,
           branchStrategy: strategyObj,

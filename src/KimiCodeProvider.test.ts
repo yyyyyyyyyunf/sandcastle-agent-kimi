@@ -23,14 +23,15 @@ import {
 
 describe("kimiCode factory", () => {
   it("has the expected name, env, and captureSessions default", () => {
-    const provider = kimiCode("kimi-code/k3");
+    const provider = kimiCode({ model: "kimi-code/k3" });
     expect(provider.name).toBe("kimi-code");
     expect(provider.env).toEqual({});
     expect(provider.captureSessions).toBe(true);
   });
 
   it("passes env through and honours captureSessions: false", () => {
-    const provider = kimiCode("kimi-code/k3", {
+    const provider = kimiCode({
+      model: "kimi-code/k3",
       env: { KIMI_MODEL_NAME: "x" },
       captureSessions: false,
     });
@@ -38,16 +39,98 @@ describe("kimiCode factory", () => {
     expect(provider.captureSessions).toBe(false);
   });
 
+  describe("env-synthesized model path (apiKey set)", () => {
+    it("synthesises the KIMI_MODEL_* env and points -m at the internal alias", () => {
+      const provider = kimiCode({
+        model: "kimi-for-coding",
+        apiKey: "sk-test",
+      });
+      expect(provider.env).toEqual({
+        KIMI_MODEL_NAME: "kimi-for-coding",
+        KIMI_MODEL_API_KEY: "sk-test",
+      });
+      const { command } = provider.buildPrintCommand({
+        prompt: "hello",
+        dangerouslySkipPermissions: true,
+      });
+      expect(command).toBe(
+        `kimi -p 'hello' --output-format stream-json -m '__kimi_env_model__'`,
+      );
+    });
+
+    it("translates baseUrl and providerType", () => {
+      const provider = kimiCode({
+        model: "gpt-4.1",
+        apiKey: "sk-test",
+        baseUrl: "https://api.example.com/v1",
+        providerType: "openai",
+      });
+      expect(provider.env).toEqual({
+        KIMI_MODEL_NAME: "gpt-4.1",
+        KIMI_MODEL_API_KEY: "sk-test",
+        KIMI_MODEL_BASE_URL: "https://api.example.com/v1",
+        KIMI_MODEL_PROVIDER_TYPE: "openai",
+      });
+    });
+
+    it("first-class fields win over same-named env entries", () => {
+      const provider = kimiCode({
+        model: "kimi-for-coding",
+        apiKey: "sk-field",
+        env: {
+          KIMI_MODEL_NAME: "stale-name",
+          KIMI_MODEL_API_KEY: "sk-stale",
+          KIMI_CODE_HOME: "/custom/kimi-home",
+        },
+      });
+      expect(provider.env).toEqual({
+        KIMI_MODEL_NAME: "kimi-for-coding",
+        KIMI_MODEL_API_KEY: "sk-field",
+        KIMI_CODE_HOME: "/custom/kimi-home",
+      });
+    });
+  });
+
+  describe("effort", () => {
+    it("injects KIMI_MODEL_THINKING_EFFORT on the env-synthesized path", () => {
+      const provider = kimiCode({
+        model: "kimi-for-coding",
+        apiKey: "sk-test",
+        effort: "max",
+      });
+      expect(provider.env.KIMI_MODEL_THINKING_EFFORT).toBe("max");
+    });
+
+    it("injects KIMI_MODEL_THINKING_EFFORT on the alias path too", () => {
+      const provider = kimiCode({ model: "kimi-code/k3", effort: "low" });
+      expect(provider.env.KIMI_MODEL_THINKING_EFFORT).toBe("low");
+    });
+
+    it("wins over an env-set KIMI_MODEL_THINKING_EFFORT", () => {
+      const provider = kimiCode({
+        model: "kimi-code/k3",
+        effort: "high",
+        env: { KIMI_MODEL_THINKING_EFFORT: "low" },
+      });
+      expect(provider.env.KIMI_MODEL_THINKING_EFFORT).toBe("high");
+    });
+
+    it("does not inject the variable when effort is unset", () => {
+      const provider = kimiCode({ model: "kimi-code/k3" });
+      expect(provider.env).toEqual({});
+    });
+  });
+
   describe("buildPrintCommand", () => {
     it("builds a fresh print command", () => {
-      const provider = kimiCode("kimi-code/k3");
+      const provider = kimiCode({ model: "kimi-code/k3" });
       expect(provider.buildPrintCommand({ prompt: "hello", dangerouslySkipPermissions: true })).toEqual({
         command: `kimi -p 'hello' --output-format stream-json -m 'kimi-code/k3'`,
       });
     });
 
     it("shell-escapes the prompt and model", () => {
-      const provider = kimiCode("m'odel");
+      const provider = kimiCode({ model: "m'odel" });
       const { command } = provider.buildPrintCommand({
         prompt: "it's here",
         dangerouslySkipPermissions: true,
@@ -58,7 +141,7 @@ describe("kimiCode factory", () => {
     });
 
     it("prepends an ensure-local relocate step for resume, then appends --session", () => {
-      const provider = kimiCode("kimi-code/k3");
+      const provider = kimiCode({ model: "kimi-code/k3" });
       const { command } = provider.buildPrintCommand({
         prompt: "go on",
         dangerouslySkipPermissions: true,
@@ -70,7 +153,7 @@ describe("kimiCode factory", () => {
     });
 
     it("forks via ensure-local + storage-layer copy and resumes the new id", () => {
-      const provider = kimiCode("kimi-code/k3");
+      const provider = kimiCode({ model: "kimi-code/k3" });
       const { command } = provider.buildPrintCommand({
         prompt: "go on",
         dangerouslySkipPermissions: true,
@@ -88,7 +171,7 @@ describe("kimiCode factory", () => {
     });
 
     it("throws when the prompt exceeds the argv budget", () => {
-      const provider = kimiCode("kimi-code/k3");
+      const provider = kimiCode({ model: "kimi-code/k3" });
       expect(() =>
         provider.buildPrintCommand({
           prompt: "x".repeat(121 * 1024),
@@ -99,7 +182,7 @@ describe("kimiCode factory", () => {
   });
 
   describe("parseStreamLine", () => {
-    const provider = kimiCode("kimi-code/k3");
+    const provider = kimiCode({ model: "kimi-code/k3" });
     const parse = provider.parseStreamLine;
 
     it("maps assistant content to text + result", () => {
@@ -194,7 +277,7 @@ describe("kimiCode factory", () => {
 
   describe("parseSessionUsage", () => {
     it("parses the last turn-scoped usage.record from wire content", () => {
-      const provider = kimiCode("kimi-code/k3");
+      const provider = kimiCode({ model: "kimi-code/k3" });
       const wire =
         '{"type":"metadata"}\n{"type":"usage.record","model":"kimi-code/k3","usage":{"inputOther":361,"output":37,"inputCacheRead":21504,"inputCacheCreation":0},"usageScope":"turn","time":1784469437027}\n';
       expect(provider.parseSessionUsage!(wire)).toEqual({
@@ -334,7 +417,8 @@ describe("sessionStorage", () => {
   const sessionId = "session_6c30ba1d-dcd4-409c-bb13-a64774b5c480";
 
   const makeProvider = () =>
-    kimiCode("kimi-code/k3", {
+    kimiCode({
+      model: "kimi-code/k3",
       sessionStorage: {
         hostSessionsDir,
         sandboxSessionsDir: SANDBOX_SESSIONS,
@@ -478,7 +562,8 @@ describe("sessionStorage", () => {
       sessionId,
       customRoot,
     );
-    const provider = kimiCode("__kimi_env_model__", {
+    const provider = kimiCode({
+      model: "kimi-code/k3",
       env: { KIMI_CODE_HOME: "/custom/kimi-home" },
       sessionStorage: { hostSessionsDir },
     });

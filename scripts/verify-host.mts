@@ -27,7 +27,7 @@ import { kimiWorkDirKey } from "../src/KimiSessionStore.js";
 
 const execp = promisify(exec);
 const MODEL = "kimi-code/k3";
-const provider = kimiCode(MODEL);
+const provider = kimiCode({ model: MODEL });
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: string): void => {

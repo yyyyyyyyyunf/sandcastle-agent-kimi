@@ -330,11 +330,29 @@ const upsertIndexFileAtomic = async (
 
 /** Options for the kimi-code agent provider. */
 export interface KimiCodeOptions {
-  /** Environment variables injected by this agent provider. This is where
-   *  `KIMI_MODEL_NAME` / `KIMI_MODEL_API_KEY` (+ optional
-   *  `KIMI_MODEL_BASE_URL` / `KIMI_MODEL_PROVIDER_TYPE`) go — kimi
-   *  synthesises an in-memory provider from them, so the sandbox needs no
-   *  config.toml. Pair with model `"__kimi_env_model__"`. */
+  /** Model to run. When `apiKey` is set this is the real model id sent to the
+   *  API (e.g. `"kimi-for-coding"`); when `apiKey` is omitted it is a
+   *  config.toml model alias (e.g. `"kimi-code/k3"`), passed to `-m` as-is. */
+  readonly model: string;
+  /** API key. Setting it selects the env-synthesized model path: the provider
+   *  injects the `KIMI_MODEL_*` variables itself, so no config.toml is needed
+   *  (the clean way to authenticate inside a sandbox). Omit it to use the
+   *  config.toml alias path with `model` as the alias. */
+  readonly apiKey?: string;
+  /** API base URL for the env-synthesized model → `KIMI_MODEL_BASE_URL`. */
+  readonly baseUrl?: string;
+  /** Provider type for the env-synthesized model → `KIMI_MODEL_PROVIDER_TYPE`.
+   *  Default: `kimi`. */
+  readonly providerType?: "kimi" | "anthropic" | "openai";
+  /** Thinking effort → `KIMI_MODEL_THINKING_EFFORT`. Process-global runtime
+   *  switch: applies to the main agent's and subagents' requests alike, and
+   *  only for `kimi`-type providers. It cannot re-enable thinking on an agent
+   *  whose base thinking level is off. Not validated locally — an unsupported
+   *  value fails server-side with a 400. */
+  readonly effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Escape hatch for any other kimi environment variables (e.g.
+   *  `KIMI_CODE_HOME`). The first-class fields above win over same-named
+   *  `KIMI_MODEL_*` entries set here. */
   readonly env?: Record<string, string>;
   /** When false, session capture is disabled. Default: true. */
   readonly captureSessions?: boolean;
@@ -521,10 +539,35 @@ const makeKimiSessionStorage = (
 // Provider factory
 // ---------------------------------------------------------------------------
 
+/** Model alias kimi synthesises from the `KIMI_MODEL_*` env family. Internal
+ *  implementation detail of the env-synthesized path — never part of the
+ *  public API. */
+const KIMI_ENV_MODEL_ALIAS = "__kimi_env_model__";
+
 export const kimiCode = (
-  model: string,
-  options?: KimiCodeOptions,
+  options: KimiCodeOptions,
 ): AgentProvider & { readonly sessionStorage: AgentSessionStorage } => {
+  // Two model paths: with `apiKey` the provider synthesises the KIMI_MODEL_*
+  // env family and points -m at the internal env-model alias; without it
+  // `model` is a config.toml alias passed to -m unchanged. First-class fields
+  // are applied after `options.env`, so they win over same-named entries.
+  const envSynthesized = options.apiKey !== undefined;
+  const cliModel = envSynthesized ? KIMI_ENV_MODEL_ALIAS : options.model;
+  const env: Record<string, string> = { ...options.env };
+  if (envSynthesized) {
+    env.KIMI_MODEL_NAME = options.model;
+    env.KIMI_MODEL_API_KEY = options.apiKey;
+    if (options.baseUrl !== undefined) {
+      env.KIMI_MODEL_BASE_URL = options.baseUrl;
+    }
+    if (options.providerType !== undefined) {
+      env.KIMI_MODEL_PROVIDER_TYPE = options.providerType;
+    }
+  }
+  if (options.effort !== undefined) {
+    env.KIMI_MODEL_THINKING_EFFORT = options.effort;
+  }
+
   let hostVersionChecked = false;
   const warnIfHostKimiTooOld = (): void => {
     if (hostVersionChecked) return;
@@ -548,8 +591,8 @@ export const kimiCode = (
 
   return {
     name: "kimi-code",
-    env: options?.env ?? {},
-    captureSessions: options?.captureSessions ?? true,
+    env,
+    captureSessions: options.captureSessions ?? true,
     sessionStorage: makeKimiSessionStorage(options),
 
     buildPrintCommand({ prompt, resumeSession, forkSession }) {
@@ -557,7 +600,7 @@ export const kimiCode = (
       // `kimi -p` runs tool calls under the auto permission policy by design —
       // there is no bypass flag, so dangerouslySkipPermissions is not threaded
       // through (and --yolo/--auto are rejected in print mode anyway).
-      const base = `kimi -p ${shellEscape(prompt)} --output-format stream-json -m ${shellEscape(model)}`;
+      const base = `kimi -p ${shellEscape(prompt)} --output-format stream-json -m ${shellEscape(cliModel)}`;
       if (resumeSession) {
         warnIfHostKimiTooOld();
         // Make the session resumable from the cwd this command will run in.

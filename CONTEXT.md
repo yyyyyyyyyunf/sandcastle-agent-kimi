@@ -36,3 +36,9 @@ A working directory as registered in kimi's `workspaces.json`, keyed by its work
 **Ensure-Local Relocation**:
 The exec-time move of a session into the current cwd's workDir Bucket (state cwd + agent homedirs + Runtime Bindings + Session Index) performed before every resume/fork; a no-op when the session is already local (ADR 0002).
 _Avoid_: migration, move
+
+**Env-Synthesized Model**:
+The in-memory provider/model kimi builds from the `KIMI_MODEL_*` env family, always bound to the alias `__kimi_env_model__`. An internal implementation detail of the provider's apiKey path — callers pass `model` + `apiKey` and never see the alias.
+
+**Thinking Effort**:
+kimi's per-request reasoning level (`low`/`medium`/`high`/`xhigh`/`max`), injected via the provider's `effort` field as `KIMI_MODEL_THINKING_EFFORT`. Process-global: it forces main-agent and subagent requests alike (kimi-type providers only) and cannot re-enable thinking on an agent whose base level is off.

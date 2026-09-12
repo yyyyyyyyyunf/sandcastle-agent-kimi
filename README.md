@@ -24,12 +24,10 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { kimiCode } from "sandcastle-agent-kimi";
 
 const result = await run({
-  agent: kimiCode("__kimi_env_model__", {
-    env: {
-      KIMI_MODEL_NAME: "kimi-for-coding",
-      KIMI_MODEL_API_KEY: process.env.KIMI_API_KEY!,
-      // optional: KIMI_MODEL_BASE_URL, KIMI_MODEL_PROVIDER_TYPE
-    },
+  agent: kimiCode({
+    model: "kimi-for-coding",
+    apiKey: process.env.KIMI_API_KEY!,
+    // optional: baseUrl, providerType, effort
   }),
   sandbox: docker({ /* ... */ }),
   prompt: "Fix the failing test in src/foo.test.ts",
@@ -39,21 +37,29 @@ const result = await run({
 ### Authentication and model selection
 
 Kimi Code does **not** read API keys from ordinary shell environment
-variables — but the `KIMI_MODEL_*` family is an explicit env channel that
-synthesises an in-memory provider and model alias. The synthesised alias is
-always `__kimi_env_model__`, and it takes priority over `default_model` in
-`config.toml`. That makes it the clean way to authenticate inside a sandbox:
-no `config.toml` to bake, credentials stay in env.
+variables. Pass `model` + `apiKey` (plus optional `baseUrl` /
+`providerType`) and the provider injects the `KIMI_MODEL_*` env channel for
+you — kimi synthesises an in-memory provider from it, so a sandbox needs no
+`config.toml` and credentials stay in env.
 
 If you instead bake a `config.toml` into your sandbox image
-(`[providers.<name>]` with an API key), pass your configured alias as the
-model instead (e.g. `kimiCode("my-provider/my-model")`).
+(`[providers.<name>]` with an API key), omit `apiKey` and pass your
+configured alias as `model` (e.g. `kimiCode({ model: "my-provider/my-model" })`).
 
 OAuth credentials from `~/.kimi-code/credentials/` also work on the host
 (no-sandbox runs), but copying them into sandboxes is not recommended. If
 you do bind-mount them into a container, the mount must be **writable** —
 kimi refreshes its token via an atomic write inside `credentials/`, and a
 read-only mount fails mid-run with `EROFS`.
+
+### Thinking effort
+
+`effort` maps to kimi's `KIMI_MODEL_THINKING_EFFORT`:
+`"low" | "medium" | "high" | "xhigh" | "max"`. It is a process-global
+switch — it applies to the main agent's *and* subagents' requests, and only
+for `kimi`-type providers. It cannot re-enable thinking on an agent whose
+thinking is off. Values are not validated locally; an unsupported value
+fails server-side with a 400.
 
 ## Capabilities
 
@@ -105,8 +111,10 @@ Session directory defaults: host `$KIMI_CODE_HOME/sessions` (or
 either side via `sessionStorage`:
 
 ```ts
-kimiCode("__kimi_env_model__", {
-  env: { /* ... */, KIMI_CODE_HOME: "/home/agent/.kimi-code" },
+kimiCode({
+  model: "kimi-for-coding",
+  apiKey: process.env.KIMI_API_KEY!,
+  env: { KIMI_CODE_HOME: "/home/agent/.kimi-code" },
   // only needed for exotic layouts — env.KIMI_CODE_HOME is already honored:
   sessionStorage: { sandboxSessionsDir: "/home/agent/.kimi-code/sessions" },
 });
