@@ -19,13 +19,13 @@
  */
 
 import { exec } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { run } from "@ai-hero/sandcastle";
-import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { run } from "@fly4ai/sandcastle";
+import { noSandbox } from "@fly4ai/sandcastle/sandboxes/no-sandbox";
+import { docker } from "@fly4ai/sandcastle/sandboxes/docker";
 import { kimiCode } from "../src/index.js";
 
 const execp = promisify(exec);
@@ -45,7 +45,9 @@ const pass = (tag: string, label: string, ok: boolean, detail = ""): void => {
 };
 
 const makeScratchRepo = async (): Promise<string> => {
-  const repo = await mkdtemp(join(tmpdir(), "sak-e2e-repo-"));
+  // realpath: macOS tmpdir is /var → /private/var; git canonicalizes the
+  // worktree gitdir, so a symlinked repo path breaks the docker git mounts.
+  const repo = await realpath(await mkdtemp(join(tmpdir(), "sak-e2e-repo-")));
   await execp("git init -b main -q", { cwd: repo });
   await execp(
     'git -c user.name=e2e -c user.email=e2e@local commit --allow-empty -qm init',
@@ -129,7 +131,8 @@ const runLeg = async (mode: Mode, strategy: Strategy): Promise<void> => {
           cwd: repo,
           branchStrategy: strategyObj,
           prompt:
-            "Create a file named marker.txt containing exactly the word PINEAPPLE, then stop.",
+            "Create a file named marker.txt containing exactly the word " +
+            "PINEAPPLE, commit it with git, then stop.",
           maxIterations: 1,
         }),
       (it) => ({
