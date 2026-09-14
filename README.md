@@ -1,7 +1,7 @@
 # sandcastle-agent-kimi
 
 A [Kimi Code](https://www.kimi.com/code/docs/en/) **agent provider** for
-[Sandcastle](https://github.com/mattpocock/sandcastle) (`@ai-hero/sandcastle`),
+[Sandcastle](https://github.com/yyyyyyyyyunf/sandcastle) (`@fly4ai/sandcastle`),
 implemented against Sandcastle's public `AgentProvider` interface. Lets
 `run()` orchestrate the `kimi` CLI inside sandboxes — with session capture,
 resume, fork, and per-iteration token usage.
@@ -9,7 +9,7 @@ resume, fork, and per-iteration token usage.
 ## Install
 
 ```sh
-npm install sandcastle-agent-kimi @ai-hero/sandcastle
+npm install sandcastle-agent-kimi @fly4ai/sandcastle
 ```
 
 Requires the `kimi` CLI **≥ 0.42.0** (verified against 0.42.0; the provider
@@ -19,8 +19,8 @@ no-sandbox runs, or in your sandbox image (see below).
 ## Quick start
 
 ```ts
-import { run } from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { run } from "@fly4ai/sandcastle";
+import { docker } from "@fly4ai/sandcastle/sandboxes/docker";
 import { kimiCode } from "sandcastle-agent-kimi";
 
 const result = await run({
@@ -159,5 +159,5 @@ into it) and `config.toml` (read-only); the image
 Mirrors Sandcastle's built-in providers (`src/AgentProvider.ts` in the
 sandcastle repo): same factory shape, same `shellEscape` and argv-size
 guard patterns, same best-effort subagent capture. `AgentSessionStorage` and
-`ParsedStreamEvent` are not re-exported from `@ai-hero/sandcastle`, so this
+`ParsedStreamEvent` are not re-exported from `@fly4ai/sandcastle`, so this
 package derives them structurally from the public `AgentProvider` interface.

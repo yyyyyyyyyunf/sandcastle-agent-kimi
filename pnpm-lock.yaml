@@ -128,9 +128,9 @@ importers:
 
   .:
     devDependencies:
-      '@ai-hero/sandcastle':
-        specifier: ^0.12.0
-        version: 0.12.0
+      '@fly4ai/sandcastle':
+        specifier: 0.13.1
+        version: 0.13.1
       '@types/node':
         specifier: ^26.2.0
         version: 26.5.0
@@ -148,18 +148,6 @@ importers:
         version: 4.1.11(@types/node@26.5.0)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.27.7)(tsx@4.23.13))
 
 packages:
-
-  '@ai-hero/sandcastle@0.12.0':
-    resolution: {integrity: sha512-kdQ414rM8t1QiWeqZ3Klz4KSd0PqQG4bRVuqGpRDUomWhojSZkEAc1tbcEcThVmBEaHkCt8LmYR49vqEPNIoYQ==}
-    hasBin: true
-    peerDependencies:
-      '@daytona/sdk': ^0.164.0
-      '@vercel/sandbox': '>=1.0.0'
-    peerDependenciesMeta:
-      '@daytona/sdk':
-        optional: true
-      '@vercel/sandbox':
-        optional: true
 
   '@clack/core@1.5.0':
     resolution: {integrity: sha512-zNikCcd8BbcEvzzG1sbXFrRHFk5kHPrpwZwksPvf9qyQO1Teb7JaXaOAxXZei9nZLDW0gaZawiuTCji88bTBhw==}
@@ -480,6 +468,18 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fly4ai/sandcastle@0.13.1':
+    resolution: {integrity: sha512-eOXXdnL346vKyd6SMg5xGwdrMgjguWTrW2orOjCiMWDeZiDYP+1DcDLLfJFcUjNEYG68QxKCnLH6mj7f67Q5ug==}
+    hasBin: true
+    peerDependencies:
+      '@daytona/sdk': ^0.164.0
+      '@vercel/sandbox': '>=1.0.0'
+    peerDependenciesMeta:
+      '@daytona/sdk':
+        optional: true
+      '@vercel/sandbox':
+        optional: true
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
@@ -1296,10 +1296,6 @@ packages:
 
 snapshots:
 
-  '@ai-hero/sandcastle@0.12.0':
-    dependencies:
-      '@clack/prompts': 1.8.0
-
   '@clack/core@1.5.0':
     dependencies:
       fast-wrap-ansi: 0.2.2
@@ -1467,6 +1463,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@fly4ai/sandcastle@0.13.1':
+    dependencies:
+      '@clack/prompts': 1.8.0
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
 

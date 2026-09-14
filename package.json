@@ -28,10 +28,10 @@
     "url": "git+https://github.com/yyyyyyyyyunf/sandcastle-agent-kimi.git"
   },
   "peerDependencies": {
-    "@ai-hero/sandcastle": ">=0.12.0"
+    "@fly4ai/sandcastle": ">=0.13.0"
   },
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.12.0",
+    "@fly4ai/sandcastle": "0.13.1",
     "@types/node": "^26.2.0",
     "tsdown": "^0.23.0",
     "tsx": "^4.23.12",

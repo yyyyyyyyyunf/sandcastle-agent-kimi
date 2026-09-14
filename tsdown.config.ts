@@ -8,7 +8,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   dts: true,
-  external: ["@ai-hero/sandcastle"],
+  external: ["@fly4ai/sandcastle"],
   // keep the published file contract: dist/index.js + dist/index.d.ts
   outExtensions: () => ({ js: ".js", dts: ".d.ts" }),
 });

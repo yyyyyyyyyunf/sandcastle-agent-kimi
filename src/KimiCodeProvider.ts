@@ -16,7 +16,7 @@ import type {
   AgentProvider,
   BindMountSandboxHandle,
   IterationUsage,
-} from "@ai-hero/sandcastle";
+} from "@fly4ai/sandcastle";
 import {
   buildKimiEnsureLocalScript,
   buildKimiForkScript,
@@ -36,7 +36,7 @@ import {
 } from "./KimiSessionStore.js";
 
 // AgentSessionStorage and ParsedStreamEvent are part of the public
-// AgentProvider interface but not re-exported from @ai-hero/sandcastle —
+// AgentProvider interface but not re-exported from @fly4ai/sandcastle —
 // derive them structurally.
 type AgentSessionStorage = NonNullable<AgentProvider["sessionStorage"]>;
 type ParsedStreamEvent = ReturnType<AgentProvider["parseStreamLine"]>[number];

@@ -31,7 +31,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { access, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { HostSessionLookup, IterationUsage } from "@ai-hero/sandcastle";
+import type { HostSessionLookup, IterationUsage } from "@fly4ai/sandcastle";
 
 export const KIMI_STATE_REL = "state.json";
 export const KIMI_MAIN_WIRE_REL = "agents/main/wire.jsonl";

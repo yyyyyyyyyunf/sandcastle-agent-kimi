@@ -11,7 +11,7 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { BindMountSandboxHandle } from "@ai-hero/sandcastle";
+import type { BindMountSandboxHandle } from "@fly4ai/sandcastle";
 import {
   isKimiVersionLayoutSupported,
   kimiCode,
